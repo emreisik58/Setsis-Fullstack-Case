@@ -6,6 +6,7 @@ namespace Setsis_Fullstack_Case.Infrastructure
     public interface IUserProviderRepo 
     {
         public int Add(User user);
+        public int Update(User user);
         public int GetByIdRemove(int id);
         public User GetByUserName(string UserName);
         public User GetById(int id);

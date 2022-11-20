@@ -9,17 +9,21 @@ namespace Setsis_Fullstack_Case.Services
     public class UserProviderRepo : IUserProviderRepo
     {
         private SetsisFullstackCaseContext _context;
-        private readonly ILogger<UserProviderRepo> _logger;
 
-        public UserProviderRepo(SetsisFullstackCaseContext context, ILogger<UserProviderRepo> logger)
+        public UserProviderRepo(SetsisFullstackCaseContext context)
         {
             _context = context;
-            _logger = logger;
         }
         public int Add(User user)
         {
             _context.Users.Add(user);
             return SaveChanges();
+        }
+        public int Update(User user) {
+
+            _context.Users.Update(user);
+            return SaveChanges();
+
         }
         public int GetByIdRemove(int id)
         {

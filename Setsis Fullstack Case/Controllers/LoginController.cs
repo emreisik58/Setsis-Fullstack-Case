@@ -1,10 +1,16 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json.Linq;
 using Setsis_Fullstack_Case.Infrastructure;
+using Setsis_Fullstack_Case.Models.Entity;
+using Setsis_Fullstack_Case.Services;
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
+using Tridi_Case_Study.Services;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -16,66 +22,79 @@ namespace Setsis_Fullstack_Case.Controllers
     {
         private IConfiguration _config;
         private IUserProviderRepo _UserProviderRepo;
+        private ITokenRepo _tokenRepo;
         private readonly ILogger<LoginController> _logger;
 
-        public LoginController(IUserProviderRepo UserProviderRepo, IConfiguration config, ILogger<LoginController> logger)
+        public LoginController(IUserProviderRepo UserProviderRepo, IConfiguration config, ITokenRepo tokenRepo, ILogger<LoginController> logger)
         {
             _config = config;
             _logger = logger;
             _UserProviderRepo = UserProviderRepo;
+            _tokenRepo = tokenRepo;
         }
 
         // POST api/<ValuesController>
         [HttpPost]
-        public async Task<JObject> Post()
+        public async Task<BusinessLayerResult> Post()
         {
             string bodyData = await new StreamReader(Request.Body, Encoding.Default).ReadToEndAsync();
 
-            JObject response = new JObject();
+            BusinessLayerResult response = new BusinessLayerResult();
             try
             {
                 RequestLogin login = Newtonsoft.Json.JsonConvert.DeserializeObject<RequestLogin>(bodyData);
-
-                var user = AuthenticateUser(login);
-
-                if (user != null)
+                bool isUserRequired = _UserProviderRepo.UserRequired(login.user,login.password);
+                if (isUserRequired)
                 {
-                    string tokenString = GenerateJSONWebToken(user);
-                    response.Add("Token",(JValue)tokenString);
+
+                    string tokenString = _tokenRepo.GenerateJSONWebToken(login.user,_config["Jwt:Key"], _config["Jwt:Issuer"], _config["Jwt:Audience"]);
+                    response.data = tokenString;
+                    response.isSuccess = true;
+
                 }
+                else 
+                {
 
-
+                    response.isSuccess = false;
+                    response.errors = "Kullanıcı Adı yada Şifre hatalı";
+                }
             }
             catch (Exception ex)
             {
-
-                response.Add("ErrorMsg",ex.Message);
+                response.isSuccess = false;
+                response.errors = ex.Message;
             }
             return response;
-
         }
 
-        private string GenerateJSONWebToken(RequestLogin userInfo)
-        {
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
-            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-            var token = new JwtSecurityToken(_config["Jwt:Issuer"], _config["Jwt:Issuer"], null, expires: DateTime.Now.AddMinutes(120),
-              signingCredentials: credentials);
-            return new JwtSecurityTokenHandler().WriteToken(token);
+        [HttpPost]
+        [Route("Register")]
+        public async Task<BusinessLayerResult> Register()
+        {
+            string bodyData = await new StreamReader(Request.Body, Encoding.Default).ReadToEndAsync();
+            BusinessLayerResult response = new BusinessLayerResult();
+            User user = Newtonsoft.Json.JsonConvert.DeserializeObject<User>(bodyData);
+             var id = _UserProviderRepo.Add(user);
+                response.data = id.ToString();
+                response.isSuccess = true;
+            return response;
         }
 
-        private RequestLogin AuthenticateUser(RequestLogin login)
-        {
-            RequestLogin user = null;
 
-            //Validate the User Credentials    
-            //Demo Purpose, I have Passed HardCoded User Information    
-            if (login.user == "Jignesh Trivedi")
-            {
-                user = new RequestLogin { user = "Jignesh Trivedi", password = "test.btest@gmail.com" };
-            }
-            return user;
+
+
+
+        [HttpGet]
+        [Route("TokenToUser")]
+        [Authorize]
+        public BusinessLayerResult TokenToUser()
+        {
+            var identity = HttpContext.User.Identity as ClaimsIdentity;
+            BusinessLayerResult response = new BusinessLayerResult();           
+            response.data = _tokenRepo.GetCurrentUser(identity);
+            response.isSuccess = true;
+            return response;
         }
         private class RequestLogin
         {
